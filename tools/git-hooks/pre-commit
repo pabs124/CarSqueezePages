@@ -1,0 +1,28 @@
+#!/bin/sh
+# Blocks a commit that would add an API key, token or secrets file.
+# Installed with: git config core.hooksPath tools/git-hooks
+# Bypass a false positive with: git commit --no-verify
+
+fail=0
+
+# 1) Files that must never be committed, whatever they contain.
+names=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '(^|/)(\.mcp\.json|\.env(\..*)?|tokens\.json|auth\.json|settings\.local\.json.*|.*\.pem|.*\.p8|.*\.p12)$')
+if [ -n "$names" ]; then
+  echo "pre-commit: secrets file staged:"; echo "$names" | sed 's/^/  /'
+  fail=1
+fi
+
+# 2) Key-shaped strings in the lines being added.
+pat='tvly-[A-Za-z0-9_-]{16,}|AIza[0-9A-Za-z_-]{30,}|GOCSPX-[A-Za-z0-9_-]{16,}|(^|[^A-Za-z0-9_-])sk-[A-Za-z0-9_-]{24,}|fc-[a-f0-9]{24,}|gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,}|xox[baprs]-[A-Za-z0-9-]{20,}|AKIA[0-9A-Z]{16}|1//0[A-Za-z0-9_-]{30,}|ya29[.][A-Za-z0-9_-]{30,}|-----BEGIN [A-Z ]*PRIVATE KEY-----|"(ACCESS_TOKEN|[A-Z_]*(API_KEY|SECRET|TOKEN))"[[:space:]]*:[[:space:]]*"[A-Za-z0-9_-]{20,}"'
+hits=$(git diff --cached -U0 --diff-filter=ACMR -- . ':!tools/git-hooks/pre-commit' | grep -E '^\+\+\+ |^\+' | awk -v pat="$pat" '
+  /^\+\+\+ / { file = substr($0, 7); next }
+  $0 ~ pat   { print "  " file }' | sort -u)
+if [ -n "$hits" ]; then
+  echo "pre-commit: key-shaped string in:"; echo "$hits"
+  fail=1
+fi
+
+if [ "$fail" = 1 ]; then
+  echo "Commit blocked. Move the secret to .env / .mcp.json (both ignored) and unstage the file."
+  exit 1
+fi

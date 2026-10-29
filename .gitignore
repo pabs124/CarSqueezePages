@@ -1,0 +1,8 @@
+.DS_Store
+*.p8
+*.p12
+*.pem
+AuthKey_*
+.appstoreconnect/
+.env
+.env.*
